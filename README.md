@@ -1,4 +1,4 @@
-# ![#f94c07](https://via.placeholder.com/15/1589F0/1589F0.png) `Multimedia Tool`
+# ![#1589F0](https://via.placeholder.com/15/1589F0/1589F0.png) `Multimedia Tool`
 
 This Multimedia Tool is a desktop application developed in C# that provides multimedia functionalities, including zipping files, unzipping files, converting YouTube videos to MP3, and downloading YouTube videos as MP4. 
 
