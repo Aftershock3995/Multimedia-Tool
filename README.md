@@ -7,7 +7,7 @@ This Multimedia Tool is a desktop application developed in C# that provides mult
 
 ## ![#1589F0](https://via.placeholder.com/15/1589F0/1589F0.png) `Installation`
 
-Download the .zip extract it and launch directly from the folder or create a shortcut of the exe for ease of access. A later version will pack all the DLLs into the exe.
+Download the installer file. Click on it, go through the process, and the app should get installed on your desktop.
 
 ## ![#1589F0](https://via.placeholder.com/15/1589F0/1589F0.png) `Features`
 
