@@ -1,37 +1,14 @@
 import socket
-import time
 
-HOST = "0.0.0.0"
-PORT = 9000
+# Setup UDP Socket
+UDP_IP = "0.0.0.0" 
+UDP_PORT = 9000
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.bind((UDP_IP, UDP_PORT))
+
+print("UDP Listener Active. Waiting for Mach3...")
 
 while True:
-    try:
-        print("Waiting for Mach3...")
-        s = socket.socket()
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind((HOST, PORT))
-        s.listen(1)
-
-        conn, addr = s.accept()
-        print("Connected:", addr)
-
-        while True:
-            data = conn.recv(1024)
-            if not data:
-                break
-
-            msg = data.decode().strip()
-            print(msg)
-
-    except Exception as e:
-        print("Error:", e)
-
-    finally:
-        try:
-            conn.close()
-        except:
-            pass
-        s.close()
-
-    print("Reconnecting in 2 sec...")
-    time.sleep(2)
+    data, addr = sock.recvfrom(1024) # Buffer size 1024 bytes
+    print(f"Received from {addr}: {data.decode().strip()}")
