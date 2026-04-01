@@ -1,42 +1,32 @@
-from ftplib import FTP
+import subprocess
 import time
 
-# --- CONFIGURATION ---
-WINDOWS_IP = "192.168.10.x"  # Change to your Mach3 PC IP
+# --- CONFIG ---
 WIN_USER = "chres"          # Your Windows Username
-WIN_PASS = "00003766"    # Your Windows Password
+WIN_IP = "192.168.10.1"      # Your Windows IP
+FILE_PATH = "C:/Mach3/macros/Mach3Mill/coords.txt"
 
-def get_mach3_data():
+def get_remote_coords():
     try:
-        # Connect and Login
-        ftp = FTP(WINDOWS_IP)
-        ftp.login(user=WIN_USER, passwd=WIN_PASS)
+        # This tells the Pi to run an SSH command to 'cat' (read) the file
+        cmd = ["ssh", f"{WIN_USER}@{WIN_IP}", f"type {FILE_PATH}"]
         
-        # Download the file content into a list
-        lines = []
-        ftp.retrlines('RETR coords.txt', lines.append)
+        # Run the command and capture the output
+        result = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        data = result.decode('utf-8').strip()
         
-        ftp.quit() # Close connection cleanly
-        
-        if lines:
-            return lines[0].strip()
+        if data:
+            return data.split(",")
     except Exception as e:
-        # This will tell you if it's "Login Denied" or "Connection Refused"
-        print(f"Error: {e}")
         return None
 
-print(f"Attempting to connect to {WINDOWS_IP}...")
+print(f"Connecting to Mach3 via SSH at {WIN_IP}...")
 
 while True:
-    data = get_mach3_data()
-    if data:
-        try:
-            # Splits the "10.5, 5.0, 0.0" into separate variables
-            x, y, z = data.split(",")
-            print(f"LIVE DRO -> X: {x} | Y: {y} | Z: {z}")
-        except ValueError:
-            print("File exists but format is wrong. Check Mach3 script.")
+    coords = get_remote_coords()
+    if coords and len(coords) == 3:
+        print(f"X: {coords[0]} | Y: {coords[1]} | Z: {coords[2]}")
     else:
-        print("Retrying connection...")
+        print("Waiting for data or SSH Key...")
     
-    time.sleep(0.1) # 10 times per second
+    time.sleep(0.1)
