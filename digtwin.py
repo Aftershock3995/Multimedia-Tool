@@ -13,10 +13,13 @@ def process_data(data):
     ptr = 0
     responses = b""
     
+    # Debug: Print raw hex to see what Mach3 is actually sending
+    # If this shows all zeros (0000...), Mach3 isn't sending real data yet
+    raw_hex = data.hex()
+    
     # Each Modbus TCP 'Write Single Register' (Func 6) packet is 12 bytes
     while ptr + 12 <= len(data):
         packet = data[ptr:ptr+12]
-        header = packet[0:7]
         func_code = packet[7]
         
         if func_code == 6:
@@ -33,8 +36,8 @@ def process_data(data):
             # Modbus TCP requires echoing the packet back as confirmation
             responses += packet
             
-        ptr += 12 # Move to next packet in buffer
-    return responses
+        ptr += 12 
+    return responses, raw_hex
 
 def start_server():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -52,21 +55,24 @@ def start_server():
         while True:
             conn, addr = s.accept()
             with conn:
-                print(f"Connected by Mach3 at {addr}")
+                print(f"\nConnected by Mach3 at {addr}")
                 while True:
                     try:
                         data = conn.recv(1024)
                         if not data: break
                         
-                        # Process buffer and send confirmation back to Mach3
-                        reply = process_data(data)
+                        reply, raw = process_data(data)
                         if reply:
                             conn.sendall(reply)
                         
-                        # Print live coords on one line
+                        # Display output
                         out = f"X: {registers.get(0,0):.2f} | Y: {registers.get(1,0):.2f} | Z: {registers.get(2,0):.2f}"
-                        print(out + " " * 10, end="\r")
-                        
+                        # Check if data is actually arriving or if it's just empty pings
+                        if "0600" in raw: # Function code 6 + address 00
+                            print(f"{out} [DATA OK]", end="\r")
+                        else:
+                            print(f"{out} [NO DATA IN PACKET]", end="\r")
+                            
                     except ConnectionResetError:
                         break
                 print("\nMach3 Disconnected. Waiting for reconnect...")
