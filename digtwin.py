@@ -1,84 +1,38 @@
 import socket
-import struct
 
-# Network Settings
+# Must match the IP and Port in your VB Script
 HOST = '192.168.10.2'
-PORT = 502
-
-# Data Store
-registers = {0: 0.0, 1: 0.0, 2: 0.0}
-
-def process_data(data):
-    """Processes the Modbus buffer and updates registers."""
-    ptr = 0
-    responses = b""
-    
-    # Debug: Print raw hex to see what Mach3 is actually sending
-    # If this shows all zeros (0000...), Mach3 isn't sending real data yet
-    raw_hex = data.hex()
-    
-    # Each Modbus TCP 'Write Single Register' (Func 6) packet is 12 bytes
-    while ptr + 12 <= len(data):
-        packet = data[ptr:ptr+12]
-        func_code = packet[7]
-        
-        if func_code == 6:
-            # Extract Address and Value
-            reg_addr = struct.unpack('>H', packet[8:10])[0]
-            raw_val = struct.unpack('>H', packet[10:12])[0]
-            
-            # Handle Negative Numbers (Two's Complement)
-            signed_val = raw_val if raw_val <= 32767 else raw_val - 65536
-            
-            # Update our internal dictionary
-            registers[reg_addr] = signed_val / 100.0
-            
-            # Modbus TCP requires echoing the packet back as confirmation
-            responses += packet
-            
-        ptr += 12 
-    return responses, raw_hex
+PORT = 502 
 
 def start_server():
+    # Create a standard TCP/IP socket
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            s.bind((HOST, PORT))
-        except PermissionError:
-            print("Error: Permission Denied. Use 'sudo'.")
-            return
-            
+        s.bind((HOST, PORT))
         s.listen(1)
-        print(f"Server Active on {HOST}:{PORT}")
-        print("Waiting for Mach3...")
+        print(f"Direct Listener Active on {HOST}:{PORT}")
+        print("Waiting for Mach3 VB Script...")
 
         while True:
             conn, addr = s.accept()
             with conn:
-                print(f"\nConnected by Mach3 at {addr}")
-                while True:
-                    try:
-                        data = conn.recv(1024)
-                        if not data: break
+                try:
+                    # Receive the raw string: "X,Y,Z"
+                    data = conn.recv(1024).decode('utf-8')
+                    if data:
+                        # Split the string by the comma
+                        coords = data.split(',')
                         
-                        reply, raw = process_data(data)
-                        if reply:
-                            conn.sendall(reply)
-                        
-                        # Display output
-                        out = f"X: {registers.get(0,0):.2f} | Y: {registers.get(1,0):.2f} | Z: {registers.get(2,0):.2f}"
-                        # Check if data is actually arriving or if it's just empty pings
-                        if "0600" in raw: # Function code 6 + address 00
-                            print(f"{out} [DATA OK]", end="\r")
-                        else:
-                            print(f"{out} [NO DATA IN PACKET]", end="\r")
-                            
-                    except ConnectionResetError:
-                        break
-                print("\nMach3 Disconnected. Waiting for reconnect...")
+                        # Ensure we got all three axes
+                        if len(coords) == 3:
+                            x, y, z = coords
+                            print(f"X: {x:>7} | Y: {y:>7} | Z: {z:>7}", end="\r")
+                except Exception as e:
+                    # If the data is garbled, just skip it
+                    pass
 
 if __name__ == "__main__":
     try:
         start_server()
     except KeyboardInterrupt:
-        print("\nServer Stopped.")
+        print("\nListener Stopped.")
