@@ -1,30 +1,35 @@
-import urllib.request
+from ftplib import FTP
 import time
 
 # --- CONFIG ---
-# Replace with your Windows IP and the folder share name
-# Format: http://[IP]/[ShareName]/coords.txt
-url = "http://192.168.10.5/Mach3Mill/coords.txt" 
+WINDOWS_IP = "192.168.10.1" # Your Mach3 PC IP
 
-def get_data():
+def get_mach3_data():
     try:
-        # Pulls the file directly from the Windows network share
-        with urllib.request.urlopen(url) as response:
-            return response.read().decode('utf-8').strip()
+        ftp = FTP(WINDOWS_IP)
+        ftp.login() # Anonymous login
+        
+        # Download the file into a list
+        lines = []
+        ftp.retrlines('RETR coords.txt', lines.append)
+        ftp.quit()
+        
+        if lines:
+            return lines[0].strip()
     except Exception as e:
         return None
 
-print("Listening for Mach3 Motion...")
+print("Link Established. Monitoring Mach3...")
 
 while True:
-    raw_data = get_data()
-    if raw_data:
+    data = get_mach3_data()
+    if data:
         try:
-            x, y, z = raw_data.split(",")
-            print(f"ABS POS -> X: {x} | Y: {y} | Z: {z}")
+            x, y, z = data.split(",")
+            print(f"X: {x} | Y: {y} | Z: {z}")
         except:
-            pass # Handle partial file writes
+            pass
     else:
-        print("Searching for Mach3 on network...")
+        print("Searching for file...")
     
-    time.sleep(0.05) # 20Hz update rate
+    time.sleep(0.1) # 10Hz Refresh
