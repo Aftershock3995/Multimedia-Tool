@@ -1,32 +1,25 @@
-import subprocess
+import urllib.request
 import time
 
-# --- CONFIG ---
-WIN_USER = "chres"          # Your Windows Username
-WIN_IP = "192.168.10.1"      # Your Windows IP
-FILE_PATH = "C:/Mach3/macros/Mach3Mill/coords.txt"
+URL = "http://192.168.10.1:8000/coords.txt"
 
-def get_remote_coords():
+def get_coords():
     try:
-        # This tells the Pi to run an SSH command to 'cat' (read) the file
-        cmd = ["ssh", f"{WIN_USER}@{WIN_IP}", f"type {FILE_PATH}"]
-        
-        # Run the command and capture the output
-        result = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-        data = result.decode('utf-8').strip()
-        
-        if data:
-            return data.split(",")
-    except Exception as e:
+        with urllib.request.urlopen(URL, timeout=1) as response:
+            data = response.read().decode().strip()
+            if data:
+                return data.split(",")
+    except:
         return None
 
-print(f"Connecting to Mach3 via SSH at {WIN_IP}...")
+print("Reading Mach3 over HTTP...")
 
 while True:
-    coords = get_remote_coords()
+    coords = get_coords()
+    
     if coords and len(coords) == 3:
         print(f"X: {coords[0]} | Y: {coords[1]} | Z: {coords[2]}")
     else:
-        print("Waiting for data or SSH Key...")
+        print("Waiting...")
     
     time.sleep(0.1)
