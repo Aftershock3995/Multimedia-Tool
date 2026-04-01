@@ -2,57 +2,74 @@ import socket
 import struct
 
 # Network Settings
-HOST = '192.168.10.2'  # The Pi's Static IP
-PORT = 502             # Standard Modbus Port
+HOST = '192.168.10.2'
+PORT = 502
 
-# This dictionary acts as our "Holding Registers"
-# Address 0, 1, 2 for X, Y, Z
-registers = {0: 0, 1: 0, 2: 0}
+# Data Store
+registers = {0: 0.0, 1: 0.0, 2: 0.0}
 
-def handle_modbus_packet(data):
-    # Modbus TCP Header is 7 bytes
-    # [Transaction ID(2)][Protocol ID(2)][Length(2)][Unit ID(1)]
-    if len(data) < 7: return None
+def process_data(data):
+    """Processes the Modbus buffer and updates registers."""
+    ptr = 0
+    responses = b""
     
-    unit_id = data[6]
-    function_code = data[7]
-    
-    # Function Code 6 = Write Single Register (What Mach3 uses for Output-Holding)
-    if function_code == 6:
-        register_addr = struct.unpack('>H', data[8:10])[0]
-        value = struct.unpack('>H', data[10:12])[0]
+    # Each Modbus TCP 'Write Single Register' (Func 6) packet is 12 bytes
+    while ptr + 12 <= len(data):
+        packet = data[ptr:ptr+12]
+        header = packet[0:7]
+        func_code = packet[7]
         
-        # Handle Signed Integers (Two's Complement)
-        if value > 32767:
-            signed_val = value - 65536
-        else:
-            signed_val = value
+        if func_code == 6:
+            # Extract Address and Value
+            reg_addr = struct.unpack('>H', packet[8:10])[0]
+            raw_val = struct.unpack('>H', packet[10:12])[0]
             
-        registers[register_addr] = signed_val / 100.0
-        return data[0:12] # Echo back the request (Modbus standard)
-    
-    return None
+            # Handle Negative Numbers (Two's Complement)
+            signed_val = raw_val if raw_val <= 32767 else raw_val - 65536
+            
+            # Update our internal dictionary
+            registers[reg_addr] = signed_val / 100.0
+            
+            # Modbus TCP requires echoing the packet back as confirmation
+            responses += packet
+            
+        ptr += 12 # Move to next packet in buffer
+    return responses
 
 def start_server():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind((HOST, PORT))
-        s.listen()
-        print(f"Server Listening on {HOST}:{PORT} (No Packages Needed)")
-        
+        try:
+            s.bind((HOST, PORT))
+        except PermissionError:
+            print("Error: Permission Denied. Use 'sudo'.")
+            return
+            
+        s.listen(1)
+        print(f"Server Active on {HOST}:{PORT}")
+        print("Waiting for Mach3...")
+
         while True:
             conn, addr = s.accept()
             with conn:
+                print(f"Connected by Mach3 at {addr}")
                 while True:
-                    data = conn.recv(1024)
-                    if not data: break
-                    
-                    response = handle_modbus_packet(data)
-                    if response:
-                        conn.sendall(response)
+                    try:
+                        data = conn.recv(1024)
+                        if not data: break
                         
-                    # Print the current status
-                    print(f"X: {registers.get(0, 0):.2f} | Y: {registers.get(1, 0):.2f} | Z: {registers.get(2, 0):.2f}", end="\r")
+                        # Process buffer and send confirmation back to Mach3
+                        reply = process_data(data)
+                        if reply:
+                            conn.sendall(reply)
+                        
+                        # Print live coords on one line
+                        out = f"X: {registers.get(0,0):.2f} | Y: {registers.get(1,0):.2f} | Z: {registers.get(2,0):.2f}"
+                        print(out + " " * 10, end="\r")
+                        
+                    except ConnectionResetError:
+                        break
+                print("\nMach3 Disconnected. Waiting for reconnect...")
 
 if __name__ == "__main__":
     try:
