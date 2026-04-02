@@ -13,7 +13,7 @@ from azure.iot.device import Message
 URL = "http://192.168.10.1:8000/coords.txt"
 
 # Azure IoT connection string
-CONN_STR = "HostName=ThermostatIoTHub.azure-devices.net;DeviceId=AmnaRaspberryPi;SharedAccessKey=kbq+eCV/rcJEGtzsw="
+CONN_STR = "HostName=CNCIOTHub.azure-devices.net;DeviceId=PlasmaCutterRasperryPi;SharedAccessKey=H91+syKQpDm1+XbYcbJhDbKRGnhI+TK5zFItgQM5aVo="
 
 
 # =========================
