@@ -1,93 +1,92 @@
 import asyncio
-import time
-import urllib.request  # Used to fetch file over HTTP
-
+import urllib.request
+import json
 from azure.iot.device.aio import IoTHubDeviceClient
 from azure.iot.device import Message
 
-# =========================
+# ==============================
 # CONFIG
-# =========================
-
-# URL to your Windows HTTP server file
+# ==============================
 URL = "http://192.168.10.1:8000/coords.txt"
 
-# Azure IoT connection string
-CONN_STR = "HostName=CNCIOTHub.azure-devices.net;DeviceId=PlasmaCutterRasperryPi;SharedAccessKey=H91+syKQpDm1+XbYcbJhDbKRGnhI+TK5zFItgQM5aVo="
+CONNECTION_STRING = "HostName=CNCIOTHub.azure-devices.net;DeviceId=PlasmaCutterRasperryPi;SharedAccessKey=H91+syKQpDm1+XbYcbJhDbKRGnhI+TK5zFItgQM5aVo="
+
+SEND_INTERVAL = 0.1  # seconds
 
 
-# =========================
-# READ XYZ FROM FILE
-# =========================
-async def read_xyz():
+# ==============================
+# MACH3 DATA FETCH
+# ==============================
+def get_coords():
     try:
-        # Request file from Windows PC
         with urllib.request.urlopen(URL, timeout=1) as response:
             data = response.read().decode().strip()
 
-            # Expect format: "X,Y,Z"
             if data:
                 parts = data.split(",")
 
                 if len(parts) == 3:
-                    x = float(parts[0])
-                    y = float(parts[1])
-                    z = float(parts[2])
-
-                    return round(x, 2), round(y, 2), round(z, 2)
-
-        return None, None, None
-
+                    try:
+                        x = float(parts[0])
+                        y = float(parts[1])
+                        z = float(parts[2])
+                        return x, y, z
+                    except ValueError:
+                        print("⚠️ Invalid numeric values from Mach3:", data)
+                        return None
+                else:
+                    print("⚠️ Unexpected format:", data)
+                    return None
     except Exception as e:
-        print(f"Error reading coords: {e}")
-        return None, None, None
+        print(f"⚠️ HTTP read error: {e}")
+        return None
 
 
-# =========================
-# SEND TELEMETRY LOOP
-# =========================
+# ==============================
+# TELEMETRY LOOP
+# ==============================
 async def send_recurring_telemetry(device_client):
-
-    # Connect to Azure IoT Hub
     await device_client.connect()
+    print("✅ Connected to Azure IoT Hub")
 
     while True:
-        # Get XYZ values from file
-        x, y, z = await read_xyz()
+        coords = get_coords()
 
-        if x is not None:
-            # Format JSON message
-            msg_txt = '{{"x": {x}, "y": {y}, "z": {z}}}'
-            data = msg_txt.format(x=x, y=y, z=z)
+        if coords:
+            x, y, z = coords
 
-            # Create Azure message
-            msg = Message(data)
-            msg.content_encoding = "utf-8"
-            msg.content_type = "application/json"
+            payload = {
+                "x": x,
+                "y": y,
+                "z": z
+            }
 
-            # Debug print
-            print("Sending:", data)
+            try:
+                msg = Message(json.dumps(payload))
+                msg.content_encoding = "utf-8"
+                msg.content_type = "application/json"
 
-            # Send to Azure
-            await device_client.send_message(msg)
+                print(f"📤 Sending → X:{x:.3f} Y:{y:.3f} Z:{z:.3f}")
+
+                await device_client.send_message(msg)
+
+            except Exception as e:
+                print(f"❌ Send failed: {e}")
 
         else:
-            print("Waiting for valid XYZ data...")
+            print("⏳ Waiting for valid Mach3 data...")
 
-        # Wait before next send
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(SEND_INTERVAL)
 
 
-# =========================
-# MAIN PROGRAM
-# =========================
+# ==============================
+# MAIN
+# ==============================
 def main():
+    print("🚀 Mach3 → Azure IoT Telemetry Starting...")
+    print("Press Ctrl+C to exit\n")
 
-    # Create IoT client
-    device_client = IoTHubDeviceClient.create_from_connection_string(CONN_STR)
-
-    print("Sending CNC position to Azure...")
-    print("Press Ctrl+C to exit")
+    device_client = IoTHubDeviceClient.create_from_connection_string(CONNECTION_STRING)
 
     loop = asyncio.get_event_loop()
 
@@ -95,15 +94,20 @@ def main():
         loop.run_until_complete(send_recurring_telemetry(device_client))
 
     except KeyboardInterrupt:
-        print("User exit")
+        print("\n🛑 User exited")
+
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+        raise
 
     finally:
+        print("🔌 Shutting down client...")
         loop.run_until_complete(device_client.shutdown())
         loop.close()
 
 
-# =========================
-# ENTRY POINT
-# =========================
+# ==============================
+# ENTRY
+# ==============================
 if __name__ == "__main__":
     main()
